@@ -14,7 +14,7 @@ It is designed to be used with AI coding assistants (Claude, Cursor, etc.), whil
 * decisions
 * code quality
 
-It enforces **how automation must be engineered**.
+It enforces **how automation must be engineered**, instead of just generating scripts.
 
 ---
 
@@ -32,42 +32,25 @@ You operate through a controlled pipeline:
 SPEC → PLAN → ARCHITECTURE → BUILD → VERIFY → REVIEW
 ```
 
-This replaces traditional RPA documentation and aligns implementation with design.
+This ensures that implementation always follows a structured and validated process.
 
 ---
 
-## Replacing PDD / SDD
+## Specification-driven approach
 
-Traditional RPA:
+Traditional automation workflows rely on separate documents and implementation steps, which often diverge over time.
 
-```text
-PDD → SDD → implementation
-```
-
-Problems:
-
-* documents become outdated
-* divergence from code
-
----
-
-This project:
+This project replaces that with an executable pipeline:
 
 ```text
 SPEC → PLAN → ARCHITECTURE → BUILD
 ```
 
-Mapping:
-
-| Traditional | This project        |
-| ----------- | ------------------- |
-| PDD         | SPEC                |
-| SDD         | PLAN + ARCHITECTURE |
-
 Result:
 
-* no drift between documentation and code
-* specification becomes executable
+* no drift between definition and implementation
+* specification directly drives the solution
+* changes propagate consistently
 
 ---
 
@@ -108,7 +91,7 @@ Do not generate code before SPEC.
 ```text
 Use rpa-selenium-engineering skill.
 
-Automate invoice submission in SAP Fiori.
+Automate submission and validation of records in a web portal.
 ```
 
 ---
@@ -118,8 +101,8 @@ Automate invoice submission in SAP Fiori.
 Check:
 
 * inputs / outputs
-* rules
-* failure cases
+* business rules
+* failure scenarios
 
 ---
 
@@ -128,7 +111,7 @@ Check:
 Ensure:
 
 * correct separation of layers
-* contracts defined
+* contracts clearly defined
 * no Selenium leaking into core
 
 ---
@@ -149,7 +132,7 @@ Ensure:
 
 * unit tests exist
 * dry-run works
-* structured logs
+* structured logs are produced
 
 ---
 
@@ -159,14 +142,14 @@ Most RPA implementations fail due to:
 
 * `time.sleep` synchronization
 * fragile selectors
-* no testability
+* lack of testability
 * duplicate side effects
-* no observability
+* lack of observability
 
 This project enforces:
 
 * explicit waits
-* idempotency
+* idempotent execution
 * structured logging
 * layered architecture
 
@@ -185,7 +168,7 @@ Rules:
 
 * `core` has zero external dependencies
 * adapters contain all IO
-* flows compose everything
+* flows compose the use case
 
 ---
 
@@ -193,9 +176,9 @@ Rules:
 
 * Runnable Python template
 * Selenium 4 with Selenium Manager
-* Page Objects
-* Structured JSON logs
-* SQLite state store
+* Page Object pattern
+* Structured JSON logging
+* SQLite state store (idempotency)
 * Retry system
 * Dry-run mode
 * Unit + integration tests
@@ -270,19 +253,19 @@ correlation_id + step logs
 
 * remove sleeps
 * improve selectors
-* add waits
+* introduce explicit waits
 
 ---
 
 ## Example use case
 
-Invoice submission:
+Record submission:
 
 Input:
 
 ```json
 [
-  { "key": "INV-001", "payload": {} }
+  { "key": "REC-001", "payload": {} }
 ]
 ```
 
@@ -291,14 +274,14 @@ Execution:
 * login
 * check existence
 * submit if needed
-* retry failures
-* persist state
+* retry transient failures
+* persist execution state
 
 Output:
 
-* structured logs
+* structured logs per step
 * artifacts on failure
-* summary
+* execution summary
 
 ---
 
@@ -316,9 +299,9 @@ Output:
 
 * one-off scripts
 * trivial automation
-* stable API already available
-* desktop automation (coordinates)
-* CAPTCHA / 2FA
+* stable API-based integrations
+* desktop automation via coordinates
+* CAPTCHA / 2FA flows
 * mobile automation
 
 ---
