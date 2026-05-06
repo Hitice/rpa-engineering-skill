@@ -20,6 +20,11 @@ def _load_records(path: Path) -> list[Record]:
     return [Record(key=item["key"], payload=item.get("payload", {})) for item in raw]
 
 
+EXIT_OK = 0
+EXIT_ERRORS = 1
+EXIT_DRY_RUN_INCONCLUSIVE = 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="rpa")
     parser.add_argument(
@@ -42,7 +47,11 @@ def main(argv: list[str] | None = None) -> int:
     records = _load_records(args.records)
     outcomes = run(settings, records)
     failed = [o for o in outcomes if o.status == "error"]
-    return 1 if failed else 0
+    if failed:
+        return EXIT_ERRORS
+    if args.dry_run and not records:
+        return EXIT_DRY_RUN_INCONCLUSIVE
+    return EXIT_OK
 
 
 if __name__ == "__main__":  # pragma: no cover

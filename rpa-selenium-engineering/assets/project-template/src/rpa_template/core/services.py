@@ -10,13 +10,17 @@ Cross-run behavior, when a :class:`StateStore` is provided:
 * Each new attempt increments the persisted ``attempts`` counter.
 * Errors are persisted as ``FAILED`` until ``attempts >= max_attempts``, after
   which the item is promoted to ``DEAD_LETTER`` and stops being retried.
-* In ``dry_run`` mode no state mutations are written.
+* In ``dry_run`` mode no state mutations are written. Records that would have
+  been submitted are reported with ``status="skipped"`` and an
+  ``output_summary={"would_apply": True}`` payload, keeping log consumers on
+  the documented ``success | error | skipped`` enum.
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import Iterable
+from typing import Any
 
 from rpa_template.contracts.browser import BrowserPort
 from rpa_template.contracts.logger import StructuredLogger
@@ -80,11 +84,13 @@ class RecordProcessor:
 
         attempts = (prior.attempts if prior is not None else 0) + 1
         step_start = time.monotonic()
+        would_apply = False
         try:
             if self._browser.record_exists(record.key):
                 outcome = RecordOutcome(key=record.key, status="skipped")
             elif self._dry_run:
-                outcome = RecordOutcome(key=record.key, status="would_apply")
+                outcome = RecordOutcome(key=record.key, status="skipped")
+                would_apply = True
             else:
                 confirmation = self._browser.submit(record)
                 outcome = RecordOutcome(
@@ -103,7 +109,12 @@ class RecordProcessor:
         duration_ms = (time.monotonic() - step_start) * 1000
         if not self._dry_run:
             self._persist(outcome, attempts)
-        self._emit_log(outcome, duration_ms=duration_ms, attempt=attempts)
+        self._emit_log(
+            outcome,
+            duration_ms=duration_ms,
+            attempt=attempts,
+            would_apply=would_apply,
+        )
         return outcome
 
     def _persist(self, outcome: RecordOutcome, attempts: int) -> None:
@@ -146,18 +157,20 @@ class RecordProcessor:
         *,
         duration_ms: float,
         attempt: int,
+        would_apply: bool = False,
     ) -> None:
+        output_summary: dict[str, Any] = {}
+        if outcome.confirmation_id is not None:
+            output_summary["confirmation_id"] = outcome.confirmation_id
+        if would_apply:
+            output_summary["would_apply"] = True
         self._logger.step(
             step=self.STEP_NAME,
             status=outcome.status,
             duration_ms=duration_ms,
             attempt=attempt,
             input_summary={"key": outcome.key},
-            output_summary=(
-                {"confirmation_id": outcome.confirmation_id}
-                if outcome.confirmation_id is not None
-                else None
-            ),
+            output_summary=output_summary or None,
             error_type=outcome.error_type,
             error_message=outcome.error_message,
         )

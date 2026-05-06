@@ -2,20 +2,13 @@
 name: rpa-selenium-engineering
 description: Engineer deterministic, testable, idempotent, and auditable web RPA using Selenium-first browser automation in Python. Use when user asks to build or refactor RPA bots, portal scraping, form filling, login flows, ERP/CRM/backoffice workflows, Page Object Models, or to replace fragile coordinate-based GUI macros. Enforces a six-phase pipeline (SPEC, PLAN, ARCHITECTURE, BUILD, VERIFY, REVIEW), API-first decisions, explicit waits over sleep, externalized configuration, structured logging, and dry-run mode. Forbids pyautogui and any coordinate or OCR-driven UI control.
 license: MIT
-compatibility: Python 3.11+, Selenium 4.x with Selenium Manager (auto driver resolution). Designed for Cursor and other coding agents that execute Python.
-metadata:
-  author: Workflow RPA Skill
-  version: 1.0.0
-  category: workflow-automation
-  tags:
-    - rpa
-    - selenium
-    - web-automation
-    - python
-    - deterministic
 ---
 
 # RPA Selenium Engineering
+
+> **Compatibility:** Python 3.11+, Selenium 4.x with Selenium Manager (auto driver resolution). Designed for Cursor, Claude Code, Claude.ai, Gemini CLI, Windsurf and any coding agent that executes Python.
+>
+> **Author:** Workflow RPA Skill • **Version:** 1.0.0 • **Category:** workflow-automation • **Tags:** rpa, selenium, web-automation, python, deterministic
 
 You are an RPA engineering agent. Build automations that are deterministic, testable, idempotent and auditable. Selenium-first for web UI; API-first when an API exists.
 
@@ -42,7 +35,8 @@ Do not use for desktop automation by coordinates, image recognition or keystroke
 - **Idempotent operations**: every step must be safe to re-run.
 - **Selenium Manager** resolves drivers automatically; never hardcode driver binary paths.
 - **Persistent state** is required for any batch run that crosses process boundaries; transient memory is not enough.
-- **Single-instance per process**: concurrent runs must be prevented at the orchestration layer via a process lock.
+- **Single-instance per lock scope**: concurrent runs must be prevented at the orchestration layer. A file lock (`filelock`) covers a single host; cluster deployments require a distributed lock (Redis, etcd, Postgres advisory).
+- **`core/` is import-pure**: only standard library + `pydantic` value objects are allowed. `selenium`, `requests`, `httpx`, `boto3`, `sqlite3`, `os`, `pathlib`, `subprocess`, `tenacity` and `filelock` are forbidden in `core/` — anything that reads or writes the outside world lives in `adapters/`.
 
 ## Mandatory pipeline
 
@@ -96,7 +90,7 @@ adapters/    # Selenium, API, DB, FS, logging implementations
 flows/       # orchestration and use cases only
 ```
 
-- `core` never imports `selenium` or `httpx`.
+- `core/` never imports `selenium`, `httpx`, `requests`, `boto3`, `sqlite3`, `os`, `pathlib`, `subprocess`, `tenacity`, `filelock` or any IO library. Std-lib `time`, `enum`, `dataclasses`, `typing`, `collections.abc` and `pydantic` value objects only.
 - `adapters` never contain business rules.
 - `flows` compose `core` with adapters via `contracts`.
 
@@ -173,7 +167,7 @@ Always respond in this order, in this language:
 - `time.sleep`, `WebDriverWait` with bare `presence_of_element_located` only, or magic numbers as timeouts.
 - Selectors built with index positions or full XPath from devtools "Copy XPath".
 - Credentials, tokens or URLs in source code.
-- `core/` importing `selenium`, `requests`, `httpx` or filesystem APIs.
+- `core/` importing `selenium`, `requests`, `httpx`, `boto3`, `sqlite3`, `os`, `pathlib`, `subprocess`, `tenacity`, `filelock` or any other IO/network/process library.
 - Adapters returning raw `WebElement` to `core/`.
 - Catch-all `except Exception: pass`.
 
@@ -185,22 +179,31 @@ Every non-trivial RPA must split resilience into two distinct layers and design 
 |---|---|---|---|
 | **Intra-call retry** | adapter | one logical operation (a click, a query) | `tenacity` policy, retries only typed transient errors with bounded attempts and exponential backoff |
 | **Cross-run state** | state store | a key's lifecycle across runs | `StateStore` contract; SQLite is enough for single-host bots, swap for Postgres/Redis in distributed setups |
-| **Single-instance** | flow | one execution per host/process group | file lock (`filelock`); the flow refuses to start if another holds the lock |
+| **Single-instance** | flow | one execution per lock scope (host by default, cluster via distributed lock) | file lock (`filelock`) for one host; Redis/etcd/Postgres advisory for clusters; the flow refuses to start if another holds the lock |
 
 State machine for each item:
 
 ```
-PENDING -> IN_PROGRESS -> SUCCESS              (terminal)
-                       -> FAILED -> ... -> DEAD_LETTER  (terminal once attempts >= max)
-                       -> SKIPPED                       (existed at the destination)
+PENDING -> IN_PROGRESS -> SUCCESS                          (terminal)
+                       -> FAILED -> ... -> DEAD_LETTER     (terminal once attempts >= max)
+                       -> SKIPPED                          (non-terminal: re-validated each run)
 ```
 
-Rules the agent must enforce:
+Terminality rules (deliberate):
 
-- The state store is consulted **before** the browser; items in a terminal state are skipped without UI traffic.
-- `dry_run` never writes to the state store.
+- **Terminal**: `SUCCESS` and `DEAD_LETTER`. `SUCCESS` carries a confirmation we issued ourselves; `DEAD_LETTER` is the explicit "give up" decision.
+- **Non-terminal**: `SKIPPED` and `FAILED`. The destination is the source of truth and may be eventually consistent — a record observed today might be gone tomorrow. Every run re-checks via `record_exists`. `FAILED` is naturally re-attempted up to `max_attempts`.
+- The state store is consulted **before** the browser; only terminal items short-circuit the UI traffic.
 - `max_attempts` (cross-run) is independent from `retry_attempts` (intra-call); both come from configuration.
 - Scheduling itself is **not** the bot's concern. Delegate to cron, Windows Task Scheduler, systemd timers, Kubernetes CronJobs or workflow engines (Airflow, Prefect, Temporal, Argo). The bot must remain a single-shot, idempotent program.
+
+### Dry-run semantics
+
+`dry_run = true` opens a real browser session, logs in and runs every read-only step (`record_exists`, navigation). It never submits, never persists state and never produces side effects. Use it as a pre-deployment smoke test against the real target. CI never invokes dry-run; CI relies on unit tests with fakes for logic and on the opt-in integration test for live connectivity.
+
+### Redaction
+
+Sensitive fields in `input_summary` and `output_summary` are redacted by the structured logger via case-insensitive substring match against `redact_keys`. Defaults: `password, token, secret, api_key, authorization, cookie, cpf, cnpj, ssn, credit_card`. Override via `RPA_REDACT_KEYS=field1,field2,...`. Free-text fields like `error_message` are not auto-redacted; redact them at the source.
 
 ## Deeper guidance
 

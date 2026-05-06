@@ -12,20 +12,26 @@ of the :class:`StateStore`.
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Callable
+from contextlib import suppress
+from datetime import UTC, datetime
+from pathlib import Path
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.remote.webdriver import WebDriver
 
 from rpa_template.adapters.pages.login_page import LoginPage
 from rpa_template.adapters.pages.records_page import RecordsPage
 from rpa_template.adapters.retry import transient_retrier
 from rpa_template.config import Settings
+from rpa_template.contracts.logger import StructuredLogger
 from rpa_template.core.entities import Record
 from rpa_template.exceptions import (
     AuthenticationError,
     ConfigurationError,
+    DomainError,
 )
 
 
@@ -75,14 +81,69 @@ def _build_driver(browser: str, *, headless: bool) -> WebDriver:
 class SeleniumBrowserAdapter:
     """Implements :class:`BrowserPort` against a real browser session."""
 
-    def __init__(self, settings: Settings) -> None:
+    STEP_NAME = "selenium_retry"
+
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        logger: StructuredLogger | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
         self._settings = settings
+        self._logger = logger
+        self._correlation_id = correlation_id
         self._driver: WebDriver | None = None
         self._records: RecordsPage | None = None
         self._retry = transient_retrier(
             attempts=settings.retry_attempts,
             initial_delay_s=settings.retry_initial_delay_s,
             max_delay_s=settings.retry_max_delay_s,
+            on_retry=self._log_retry if logger is not None else None,
+        )
+
+    def _diagnostics_dir(self) -> Path | None:
+        if self._correlation_id is None:
+            return None
+        target = Path(self._settings.artifacts_dir) / self._correlation_id
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return None
+        return target
+
+    def _dump_diagnostics(self, driver: WebDriver, label: str) -> None:
+        """Persist page_source + screenshot for post-mortem; never raises."""
+        target = self._diagnostics_dir()
+        if target is None:
+            return
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        prefix = f"{timestamp}-{label}"
+        with suppress(OSError, WebDriverException):
+            (target / f"{prefix}.html").write_text(
+                driver.page_source, encoding="utf-8"
+            )
+        with suppress(OSError, WebDriverException, ValueError):
+            png_b64 = driver.get_screenshot_as_base64()
+            (target / f"{prefix}.png").write_bytes(base64.b64decode(png_b64))
+
+    def _log_retry(
+        self,
+        attempt_number: int,
+        error_type: str,
+        error_message: str,
+        delay_s: float,
+    ) -> None:
+        if self._logger is None:
+            return
+        self._logger.step(
+            step=self.STEP_NAME,
+            status="error",
+            duration_ms=delay_s * 1000.0,
+            attempt=attempt_number,
+            error_type=error_type,
+            error_message=error_message,
+            output_summary={"next_delay_s": round(delay_s, 3), "retrying": True},
         )
 
     @property
@@ -100,9 +161,11 @@ class SeleniumBrowserAdapter:
                 self._settings.password.get_secret_value(),
             )
         except TimeoutException as err:
+            self._dump_diagnostics(driver, "login_timeout")
             driver.quit()
             raise AuthenticationError("Login flow did not reach the dashboard") from err
         except Exception:
+            self._dump_diagnostics(driver, "login_unexpected")
             driver.quit()
             raise
 
@@ -125,9 +188,17 @@ class SeleniumBrowserAdapter:
     def record_exists(self, key: str) -> bool:
         if self._records is None:
             raise RuntimeError("Session not started.")
-        return bool(self._retry(self._records.has_record, key))
+        try:
+            return bool(self._retry(self._records.has_record, key))
+        except DomainError:
+            self._dump_diagnostics(self.driver, f"record_exists-{key}")
+            raise
 
     def submit(self, record: Record) -> str:
         if self._records is None:
             raise RuntimeError("Session not started.")
-        return str(self._retry(self._records.submit_record, record))
+        try:
+            return str(self._retry(self._records.submit_record, record))
+        except DomainError:
+            self._dump_diagnostics(self.driver, f"submit-{record.key}")
+            raise

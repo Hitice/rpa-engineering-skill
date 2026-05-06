@@ -126,13 +126,14 @@ def test_dry_run_does_not_persist() -> None:
     store = SqliteStateStore(":memory:")
     try:
         browser = FakeBrowser()
-        _, logger = _logger()
+        buf, logger = _logger()
         processor = RecordProcessor(
             browser=browser, logger=logger, state_store=store, dry_run=True
         )
         outcomes = processor.process([Record(key="K4")])
-        assert outcomes[0].status == "would_apply"
+        assert outcomes[0].status == "skipped"
         assert store.get("K4") is None
+        assert '"would_apply": true' in buf.getvalue()
     finally:
         store.close()
 
@@ -143,3 +144,37 @@ def test_works_without_state_store() -> None:
     processor = RecordProcessor(browser=browser, logger=logger)
     outcomes = processor.process([Record(key="K5")])
     assert outcomes[0].status == "success"
+
+
+def test_skipped_is_non_terminal_and_revalidates_against_destination() -> None:
+    """SKIPPED is intentionally non-terminal: a previous run observed the
+    record at the destination, but the destination is the source of truth and
+    may be eventually consistent. Each run re-checks via ``record_exists``.
+    Only ``SUCCESS`` (we wrote it) and ``DEAD_LETTER`` (retries exhausted) are
+    terminal.
+    """
+    store = SqliteStateStore(":memory:")
+    try:
+        first_browser = FakeBrowser(existing_keys=["K"])
+        _, first_logger = _logger()
+        RecordProcessor(
+            browser=first_browser, logger=first_logger, state_store=store
+        ).process([Record(key="K")])
+        first_state = store.get("K")
+        assert first_state is not None
+        assert first_state.status == RunStatus.SKIPPED
+        assert first_browser.exists_calls == ["K"]
+
+        second_browser = FakeBrowser(existing_keys=[])
+        _, second_logger = _logger()
+        outcomes = RecordProcessor(
+            browser=second_browser, logger=second_logger, state_store=store
+        ).process([Record(key="K")])
+        assert second_browser.exists_calls == ["K"], "must re-validate, not short-circuit"
+        assert outcomes[0].status == "success"
+        assert [r.key for r in second_browser.submitted] == ["K"]
+        final_state = store.get("K")
+        assert final_state is not None
+        assert final_state.status == RunStatus.SUCCESS
+    finally:
+        store.close()

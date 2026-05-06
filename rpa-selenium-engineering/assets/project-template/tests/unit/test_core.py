@@ -55,12 +55,13 @@ def test_skips_existing_records() -> None:
 
 def test_dry_run_does_not_submit() -> None:
     browser = FakeBrowser()
-    _, logger = _logger()
+    buf, logger = _logger()
     outcomes = RecordProcessor(browser=browser, logger=logger, dry_run=True).process(
         [Record(key="a", payload={"x": "1"})]
     )
-    assert outcomes[0].status == "would_apply"
+    assert outcomes[0].status == "skipped"
     assert browser.submitted == []
+    assert '"would_apply": true' in buf.getvalue()
 
 
 def test_submits_new_records_and_returns_confirmation() -> None:

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from rpa_template.adapters.sqlite_state_store import NullStateStore, SqliteStateStore
+from rpa_template.adapters.sqlite_state_store import SqliteStateStore
+from rpa_template.contracts.state_store import NullStateStore
 from rpa_template.core.state import ItemState, RunStatus
 
 

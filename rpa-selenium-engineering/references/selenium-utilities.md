@@ -164,20 +164,23 @@ Decode `pdf_b64` and write it to the artifact folder under the run's `correlatio
 
 ## Network and logs via BiDi (W3C)
 
-Selenium 4 exposes the W3C BiDi protocol. Use it to capture network traffic, console logs and JavaScript errors instead of polling DOM.
+Selenium 4 exposes the W3C BiDi protocol. Use it to capture network traffic, console logs and JavaScript errors instead of polling DOM. The Python BiDi surface evolves between minor releases; pin a Selenium version and verify the exact API against the official docs at https://www.selenium.dev/documentation/webdriver/bidirectional/bidi_api/ before relying on it.
+
+Conceptual sketch (Selenium >= 4.20):
 
 ```python
-async def capture_console(driver):
-    async with driver.bidi_connection() as session:
-        log = session.session.log
-        async for entry in log.add_log_handler(...):
-            yield entry
+def on_console_message(message):
+    # message has level, text, args, stack_trace, etc.
+    if message.level == "error":
+        raise AssertionError(f"console error: {message.text}")
+
+driver.script.add_console_message_handler(on_console_message)
 ```
 
-Patterns:
+Patterns enabled by BiDi:
 
 - assert that no `error` console entry was produced during a critical step
-- intercept and assert calls to a backend endpoint to confirm a submit actually happened
+- intercept and assert calls to a backend endpoint to confirm a submit actually happened (`driver.network.add_request_handler(...)`)
 - block known-bad third-party domains during automation runs
 
 ## Virtual Authenticator

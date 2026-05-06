@@ -14,10 +14,10 @@ from contextlib import ExitStack, contextmanager
 from filelock import FileLock, Timeout
 
 from rpa_template.adapters.selenium_browser import SeleniumBrowserAdapter
-from rpa_template.adapters.sqlite_state_store import NullStateStore, SqliteStateStore
+from rpa_template.adapters.sqlite_state_store import SqliteStateStore
 from rpa_template.adapters.structured_logger import JsonStructuredLogger
 from rpa_template.config import Settings
-from rpa_template.contracts.state_store import StateStore
+from rpa_template.contracts.state_store import NullStateStore, StateStore
 from rpa_template.core.entities import Record, RecordOutcome
 from rpa_template.core.services import RecordProcessor
 from rpa_template.exceptions import ConfigurationError
@@ -54,13 +54,16 @@ def run(settings: Settings, records: Iterable[Record]) -> list[RecordOutcome]:
     logger = JsonStructuredLogger(
         process=settings.process_name,
         correlation_id=correlation_id,
+        redact_keys=settings.redact_keys,
     )
 
     with ExitStack() as stack:
         stack.enter_context(_process_lock(settings))
         store = stack.enter_context(_state_store(settings))
 
-        browser = SeleniumBrowserAdapter(settings)
+        browser = SeleniumBrowserAdapter(
+            settings, logger=logger, correlation_id=correlation_id
+        )
         processor = RecordProcessor(
             browser=browser,
             logger=logger,

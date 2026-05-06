@@ -1,11 +1,13 @@
-"""SQLite-backed :class:`StateStore` plus a no-op fallback.
+"""SQLite-backed :class:`StateStore`.
 
 A single-file SQLite database is enough to make an RPA idempotent across runs:
 it persists per-record status, attempt counters and the last error so that the
 next execution can skip terminal items and resume the rest.
 
-WAL mode is enabled so concurrent readers do not block the writer; writes are
-serialized through one connection per process.
+WAL mode is enabled on file-backed databases so concurrent readers do not
+block the writer; writes are serialized through one connection per process.
+In-memory databases (``:memory:`` for tests) silently skip the WAL PRAGMA,
+which is unsupported there.
 """
 
 from __future__ import annotations
@@ -44,7 +46,10 @@ class SqliteStateStore:
             isolation_level=None,  # autocommit; explicit txns via BEGIN
             check_same_thread=False,
         )
-        self._conn.executescript("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+        if self._path != ":memory:":
+            self._conn.executescript(
+                "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;"
+            )
         self._conn.executescript(_SCHEMA)
 
     @classmethod
@@ -103,13 +108,3 @@ class SqliteStateStore:
                     timestamp,
                 ),
             )
-
-
-class NullStateStore:
-    """No-op store used when persistence is intentionally disabled."""
-
-    def get(self, key: str) -> ItemState | None:
-        return None
-
-    def upsert(self, state: ItemState) -> None:
-        return None

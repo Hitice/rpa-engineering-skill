@@ -67,16 +67,42 @@ Item lifecycle:
 ```
 PENDING ──▶ IN_PROGRESS ──▶ SUCCESS                          (terminal)
                           ▶ FAILED ──▶ ... ──▶ DEAD_LETTER   (terminal at max_attempts)
-                          ▶ SKIPPED                          (already at destination)
+                          ▶ SKIPPED                          (non-terminal, re-validated)
 ```
 
 Rules:
 
-- A *terminal* state (`SUCCESS`, `DEAD_LETTER`) means the item is excluded from future runs without consulting the browser.
+- *Terminal* states are exactly `SUCCESS` and `DEAD_LETTER`. They short-circuit the UI: subsequent runs do not consult the browser for those keys.
+- `SKIPPED` is intentionally **non-terminal**. It records that a previous run observed the record at the destination, but the destination is the source of truth and may be eventually consistent. Every run re-validates via `record_exists`; if the destination no longer has the item, the bot proceeds to submit. The cost is one read per previously-skipped key per run, in exchange for correctness against rollbacks, manual deletions and replication lag.
+- `FAILED` is also non-terminal: it is the natural input to the next attempt, until `attempts >= max_attempts` promotes it to `DEAD_LETTER`.
 - `attempts` is incremented per cross-run attempt, never per intra-call retry.
 - `dry_run` never persists state mutations.
 - Storage backend is interchangeable: SQLite for single-host bots, Postgres or Redis for fleets. Pick the smallest store that meets the consistency need.
 - Schemas evolve with explicit migrations; never silently widen columns or change semantics.
+
+## Dry-run
+
+Dry-run is **online by design**. The flow:
+
+- acquires the process lock
+- opens a real browser session and performs the login
+- traverses the existence check for every record
+- never submits, never writes the state store, never produces external side effects
+- emits each suppressed write as `status="skipped"` with `output_summary={"would_apply": true, ...}` so log consumers stay on the documented `success | error | skipped` enum
+- exits with the same status codes as a real run
+
+This makes dry-run a useful pre-deployment smoke against the real target. Continuous integration never invokes dry-run: CI runs the unit suite with fake adapters; live connectivity is exercised by the `integration` test marker, opted in via the same environment variables a real run uses.
+
+## Redaction policy
+
+The structured logger redacts sensitive payload fields. The contract:
+
+- a curated default list (`password`, `token`, `secret`, `api_key`, `apikey`, `authorization`, `cookie`, `cpf`, `cnpj`, `ssn`, `credit_card`) ships in `Settings.redact_keys`
+- override declaratively via the `RPA_REDACT_KEYS` env variable as a comma-separated list
+- match rule is case-insensitive substring on the *key*; values become `"***"`
+- redaction descends recursively into nested dicts and lists in `input_summary` and `output_summary`
+- free-text fields (`error_message`, `input_summary["url"]`, etc.) are **not** auto-redacted; redact at the source whenever the call site might emit secrets in narrative form
+- redaction is a defense-in-depth control. The first defense is to never put raw secrets into logging summaries.
 
 ## Process lock and orchestration
 
@@ -123,15 +149,6 @@ Rules:
 - `input_summary` and `output_summary` contain only non-sensitive fields; redact tokens, full names, document numbers as configured.
 - On error, also persist `page_source` and a screenshot to a per-execution artifact folder, with the same `correlation_id`.
 - A run finishes with a summary record: totals for `success`, `error`, `skipped`, plus elapsed time.
-
-## Dry-run
-
-`--dry-run` must:
-
-- traverse the full flow including reads and validations
-- never perform writes (no submits, no uploads, no DB writes, no email)
-- log a `would_apply` payload describing the change that was suppressed
-- exit with the same status codes as a real run
 
 ## Error taxonomy
 

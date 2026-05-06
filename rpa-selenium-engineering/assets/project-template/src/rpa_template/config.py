@@ -9,10 +9,24 @@ no single-instance enforcement).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, HttpUrl, SecretStr
+from pydantic import Field, HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_REDACT_KEYS: tuple[str, ...] = (
+    "password",
+    "token",
+    "secret",
+    "api_key",
+    "apikey",
+    "authorization",
+    "cookie",
+    "cpf",
+    "cnpj",
+    "ssn",
+    "credit_card",
+)
 
 
 class Settings(BaseSettings):
@@ -52,7 +66,22 @@ class Settings(BaseSettings):
     artifacts_dir: Path = Path("./artifacts")
     log_level: str = "INFO"
 
+    redact_keys: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_REDACT_KEYS),
+        description=(
+            "Substrings (case-insensitive) used to redact log payload keys. "
+            "Override via RPA_REDACT_KEYS as a comma-separated list."
+        ),
+    )
+
     dry_run: bool = False
+
+    @field_validator("redact_keys", mode="before")
+    @classmethod
+    def _parse_redact_keys(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
 
 
 def load_settings() -> Settings:
