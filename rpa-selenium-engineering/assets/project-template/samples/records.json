@@ -1,0 +1,4 @@
+[
+  { "key": "ACME-0001", "payload": { "name": "Alice", "amount": "150.00" } },
+  { "key": "ACME-0002", "payload": { "name": "Bob", "amount": "275.50" } }
+]
