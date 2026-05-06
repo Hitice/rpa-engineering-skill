@@ -1,6 +1,6 @@
-# rpa-engineering-skill
+# RPA-Engineering-Skill
 
-Build production-grade browser automation in Python — deterministic, idempotent, testable, and observable by default.
+Build production-grade browser automation in Python - Deterministic, idempotent, testable, and observable by default.
 
 ## What This Project Is
 
