@@ -1,6 +1,6 @@
 # RPA Engineering Skill (Selenium 4)
 
-Build deterministic, testable, idempotent, and auditable RPA using Selenium 4 — with enforced engineering standards.
+Build deterministic, testable, idempotent and auditable RPA using Selenium 4 — with enforced engineering standards.
 
 ---
 
@@ -8,19 +8,50 @@ Build deterministic, testable, idempotent, and auditable RPA using Selenium 4 �
 
 This project is an **engineering skill + reference architecture** for building RPA systems.
 
-It is designed to be used with AI coding assistants (Claude, Cursor, etc.), while maintaining full control over:
+It is not:
+
+* a framework
+* a library
+* a low-code tool
+
+It is a **set of enforced rules and structure** designed to guide how automation is built.
+
+It is intended to be used with AI coding assistants (Claude, Cursor, VSCode + extensions), while keeping full control over:
 
 * architecture
-* decisions
+* implementation decisions
 * code quality
-
-It enforces **how automation must be engineered**, instead of just generating scripts.
 
 ---
 
-## Core idea
+## What problem this solves
 
-Instead of writing RPA directly:
+Most RPA implementations degrade over time due to:
+
+* fragile synchronization (`time.sleep`)
+* unstable selectors
+* duplicated side effects
+* lack of observability
+* tight coupling between UI and business logic
+
+This results in systems that are:
+
+* hard to maintain
+* hard to debug
+* unsafe to re-run
+
+This project enforces:
+
+* deterministic synchronization (explicit waits)
+* idempotent execution
+* structured logging
+* strict architectural boundaries
+
+---
+
+## Core concept (how to think)
+
+Instead of writing automation directly:
 
 ```text
 prompt → code → fragile automation
@@ -32,33 +63,17 @@ You operate through a controlled pipeline:
 SPEC → PLAN → ARCHITECTURE → BUILD → VERIFY → REVIEW
 ```
 
-This ensures that implementation always follows a structured and validated process.
+This pipeline is the core of the project.
+
+It ensures that:
+
+* requirements are explicit before implementation
+* architecture is defined before code
+* validation is mandatory
 
 ---
 
-## Specification-driven approach
-
-Traditional automation workflows rely on separate documents and implementation steps, which often diverge over time.
-
-This project replaces that with an executable pipeline:
-
-```text
-SPEC → PLAN → ARCHITECTURE → BUILD
-```
-
-Result:
-
-* no drift between definition and implementation
-* specification directly drives the solution
-* changes propagate consistently
-
----
-
-## Usage with Claude + VSCode (primary workflow)
-
-This is the **intended way to use the project**.
-
----
+## Using with AI (Claude / Cursor / VSCode)
 
 ### Setup
 
@@ -69,7 +84,7 @@ cp -r rpa-selenium-engineering .claude/skills/
 
 Create:
 
-```bash
+```
 .claude/system.md
 ```
 
@@ -84,9 +99,11 @@ Do not generate code before SPEC.
 
 ---
 
-### How to use (day-to-day)
+### Day-to-day workflow
 
-#### 1. Start with context
+#### 1. Provide context
+
+Example:
 
 ```text
 Use rpa-selenium-engineering skill.
@@ -98,27 +115,27 @@ Automate submission and validation of records in a web portal.
 
 #### 2. Validate SPEC
 
-Check:
+You review:
 
 * inputs / outputs
 * business rules
-* failure scenarios
+* failure cases
 
 ---
 
 #### 3. Validate PLAN + ARCHITECTURE
 
-Ensure:
+You ensure:
 
-* correct separation of layers
-* contracts clearly defined
-* no Selenium leaking into core
+* proper layer separation
+* contracts are well defined
+* no Selenium usage inside core
 
 ---
 
 #### 4. Build
 
-Generate:
+The agent generates:
 
 * adapters
 * page objects
@@ -128,60 +145,67 @@ Generate:
 
 #### 5. Verify (mandatory)
 
-Ensure:
+You confirm:
 
 * unit tests exist
 * dry-run works
-* structured logs are produced
+* structured logs are generated
 
 ---
 
-## What problem this solves
+## Using in real scenarios
 
-Most RPA implementations fail due to:
+### New RPA
 
-* `time.sleep` synchronization
-* fragile selectors
-* lack of testability
-* duplicate side effects
-* lack of observability
-
-This project enforces:
-
-* explicit waits
-* idempotent execution
-* structured logging
-* layered architecture
+1. Copy the template
+2. Define SPEC
+3. Iterate through the pipeline
+4. Validate at each stage
 
 ---
 
-## Architecture overview
+### Existing RPA (recommended approach)
 
-```text
+Do not rewrite everything.
+
+Refactor incrementally:
+
+1. Wrap current automation in an adapter
+2. Define contracts
+3. extract business logic into `core/`
+4. introduce state store (idempotency)
+5. add structured logging
+6. gradually remove sleeps and fragile selectors
+
+---
+
+## Architecture (practical view)
+
+```
 flows/      → orchestration
 core/       → pure logic (no IO)
 contracts/  → interfaces
 adapters/   → Selenium / API / DB
 ```
 
-Rules:
+Key rules:
 
-* `core` has zero external dependencies
-* adapters contain all IO
+* `core` has no external dependencies
+* adapters handle all IO
 * flows compose the use case
 
 ---
 
 ## What you get
 
-* Runnable Python template
+* runnable Python template
 * Selenium 4 with Selenium Manager
 * Page Object pattern
-* Structured JSON logging
-* SQLite state store (idempotency)
-* Retry system
-* Dry-run mode
-* Unit + integration tests
+* structured JSON logging
+* SQLite state store
+* retry mechanism
+* dry-run mode
+* unit and integration tests
 
 ---
 
@@ -203,63 +227,7 @@ rpa --records ./samples/records.json --dry-run
 
 ---
 
-## Improving an existing RPA (recommended approach)
-
-Do not rewrite everything.
-
-Apply incrementally:
-
-### Step 1 — Wrap existing automation
-
-```text
-adapters/legacy_adapter.py
-```
-
----
-
-### Step 2 — Define contracts
-
-```text
-contracts/
-```
-
----
-
-### Step 3 — Move business logic
-
-```text
-core/
-```
-
----
-
-### Step 4 — Add idempotency
-
-```text
-state_store (SQLite)
-```
-
----
-
-### Step 5 — Add structured logging
-
-```text
-correlation_id + step logs
-```
-
----
-
-### Step 6 — Refactor Selenium gradually
-
-* remove sleeps
-* improve selectors
-* introduce explicit waits
-
----
-
 ## Example use case
-
-Record submission:
 
 Input:
 
@@ -285,35 +253,25 @@ Output:
 
 ---
 
-## Comparison
-
-| Approach         | Determinism | Testability | Idempotency | Observability |
-| ---------------- | ----------- | ----------- | ----------- | ------------- |
-| Selenium scripts | ❌           | ❌           | ❌           | ❌             |
-| RPA tools        | ⚠           | partial     | depends     | limited       |
-| This project     | ✔           | ✔           | ✔           | ✔             |
-
----
-
 ## When NOT to use
 
 * one-off scripts
 * trivial automation
-* stable API-based integrations
+* stable API integrations
 * desktop automation via coordinates
 * CAPTCHA / 2FA flows
 * mobile automation
 
 ---
 
-## Design principles
+## Engineering principles
 
 * API-first
 * no `time.sleep`
 * no hardcoded values
 * no global state
 * idempotent operations
-* structured logs per step
+* structured logging per step
 
 ---
 
