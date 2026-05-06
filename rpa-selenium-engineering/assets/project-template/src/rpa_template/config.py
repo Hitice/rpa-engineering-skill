@@ -64,7 +64,6 @@ class Settings(BaseSettings):
     lock_timeout_s: float = Field(default=10.0, ge=0)
 
     artifacts_dir: Path = Path("./artifacts")
-    log_level: str = "INFO"
 
     redact_keys: list[str] = Field(
         default_factory=lambda: list(DEFAULT_REDACT_KEYS),
