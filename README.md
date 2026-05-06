@@ -1,156 +1,210 @@
-# RPA Engineering (Selenium 4)
+# RPA Engineering Skill (Selenium 4)
 
-Build deterministic, testable, idempotent, and auditable web automation using Python and Selenium 4.
+Build deterministic, testable, idempotent, and auditable RPA using Selenium 4 — with enforced engineering standards.
 
 ---
 
 ## What this is
 
-This project is a production-grade RPA engineering template and standard.
+This project is an **engineering skill + reference architecture** for building RPA systems.
 
-It is designed for developers who want to build automation that:
+It is designed to be used with AI coding assistants (Claude, Cursor, etc.), while maintaining full control over:
 
-* does not break randomly
-* can be tested
-* can be safely re-executed
-* can be debugged in production
+* architecture
+* decisions
+* code quality
 
-This is not a script generator.
-This is a structured way to engineer automation systems.
+It enforces **how automation must be engineered**.
 
 ---
 
-## Why this exists
+## Core idea
 
-Most RPA code in the wild has the same problems:
+Instead of writing RPA directly:
 
-* Flaky synchronization
-
-  * `time.sleep`, copied XPath, race conditions
-
-* No testability
-
-  * business logic tied to DOM
-  * impossible to mock or validate
-
-* Not idempotent
-
-  * reruns create duplicates or corrupt state
-
-* Impossible to debug
-
-  * no structured logs
-  * no correlation id
-  * no artifacts on failure
-
-* Vendor lock-in
-
-  * cannot replace UI with API
-  * cannot run in CI
-
-This project eliminates those problems by design.
-
----
-
-## Core principles
-
-### API-first
-
-If an API exists, use it before UI automation.
-
----
-
-### Deterministic execution
-
-* Explicit waits only (`WebDriverWait`)
-* No `sleep`
-* Domain-based conditions
-
----
-
-### Idempotency by design
-
-* Safe to re-run
-* No duplicate side effects
-* State tracked across executions
-
----
-
-### Layered architecture
-
-```
-flows/      → orchestration
-core/       → pure logic (no IO)
-contracts/  → interfaces
-adapters/   → Selenium / DB / API
+```text
+prompt → code → fragile automation
 ```
 
-* `core` has zero external dependencies
-* adapters are swappable (Selenium → API → Playwright)
+You operate through a controlled pipeline:
 
----
-
-### Observability
-
-Every step produces structured logs:
-
-```json
-{
-  "correlation_id": "...",
-  "step": "submit_invoice",
-  "status": "success",
-  "duration_ms": 1200
-}
+```text
+SPEC → PLAN → ARCHITECTURE → BUILD → VERIFY → REVIEW
 ```
 
-On failure:
-
-* screenshot
-* page source
-* full context
+This replaces traditional RPA documentation and aligns implementation with design.
 
 ---
 
-## What you get
+## Replacing PDD / SDD
 
-* Runnable Python project template
-* Selenium 4 setup with Selenium Manager
-* Page Object pattern
-* Structured JSON logging
-* SQLite state store (idempotency)
-* Retry system (tenacity)
-* Dry-run mode
-* Unit + integration tests
-* CI ready (ruff, mypy, pytest)
+Traditional RPA:
+
+```text
+PDD → SDD → implementation
+```
+
+Problems:
+
+* documents become outdated
+* divergence from code
+
+---
+
+This project:
+
+```text
+SPEC → PLAN → ARCHITECTURE → BUILD
+```
+
+Mapping:
+
+| Traditional | This project        |
+| ----------- | ------------------- |
+| PDD         | SPEC                |
+| SDD         | PLAN + ARCHITECTURE |
+
+Result:
+
+* no drift between documentation and code
+* specification becomes executable
+
+---
+
+## Usage with Claude + VSCode (primary workflow)
+
+This is the **intended way to use the project**.
+
+---
+
+### Setup
+
+```bash
+mkdir -p .claude/skills
+cp -r rpa-selenium-engineering .claude/skills/
+```
+
+Create:
+
+```bash
+.claude/system.md
+```
+
+```text
+Load the skill "rpa-selenium-engineering".
+
+Always follow:
+SPEC → PLAN → ARCHITECTURE → BUILD → VERIFY → REVIEW
+
+Do not generate code before SPEC.
+```
+
+---
+
+### How to use (day-to-day)
+
+#### 1. Start with context
+
+```text
+Use rpa-selenium-engineering skill.
+
+Automate invoice submission in SAP Fiori.
+```
+
+---
+
+#### 2. Validate SPEC
+
+Check:
+
+* inputs / outputs
+* rules
+* failure cases
+
+---
+
+#### 3. Validate PLAN + ARCHITECTURE
+
+Ensure:
+
+* correct separation of layers
+* contracts defined
+* no Selenium leaking into core
+
+---
+
+#### 4. Build
+
+Generate:
+
+* adapters
+* page objects
+* core services
+
+---
+
+#### 5. Verify (mandatory)
+
+Ensure:
+
+* unit tests exist
+* dry-run works
+* structured logs
+
+---
+
+## What problem this solves
+
+Most RPA implementations fail due to:
+
+* `time.sleep` synchronization
+* fragile selectors
+* no testability
+* duplicate side effects
+* no observability
+
+This project enforces:
+
+* explicit waits
+* idempotency
+* structured logging
+* layered architecture
 
 ---
 
 ## Architecture overview
 
-```
-records (JSON / queue / DB)
-        ↓
-flows/ (entrypoint + orchestration)
-        ↓
-core/ (pure business logic)
-        ↓
-contracts/ (interfaces)
-        ↓
-adapters/ (Selenium / API / DB)
-        ↓
-external systems
+```text
+flows/      → orchestration
+core/       → pure logic (no IO)
+contracts/  → interfaces
+adapters/   → Selenium / API / DB
 ```
 
-Adapters can be replaced without changing core logic.
+Rules:
+
+* `core` has zero external dependencies
+* adapters contain all IO
+* flows compose everything
 
 ---
 
-## Quick start
+## What you get
+
+* Runnable Python template
+* Selenium 4 with Selenium Manager
+* Page Objects
+* Structured JSON logs
+* SQLite state store
+* Retry system
+* Dry-run mode
+* Unit + integration tests
+
+---
+
+## Starting a new project
 
 ```bash
-git clone https://github.com/Hitice/rpa-engineering-skill.git
-cd rpa-engineering-skill
-
 cp -r rpa-selenium-engineering/assets/project-template my-rpa
 cd my-rpa
 
@@ -160,21 +214,69 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 
 cp .env.example .env
-# configure:
-# RPA_TARGET_URL
-# RPA_USERNAME
-# RPA_PASSWORD
-
 pytest
-
 rpa --records ./samples/records.json --dry-run
 ```
 
 ---
 
-## Real example
+## Improving an existing RPA (recommended approach)
 
-### Use case: invoice submission
+Do not rewrite everything.
+
+Apply incrementally:
+
+### Step 1 — Wrap existing automation
+
+```text
+adapters/legacy_adapter.py
+```
+
+---
+
+### Step 2 — Define contracts
+
+```text
+contracts/
+```
+
+---
+
+### Step 3 — Move business logic
+
+```text
+core/
+```
+
+---
+
+### Step 4 — Add idempotency
+
+```text
+state_store (SQLite)
+```
+
+---
+
+### Step 5 — Add structured logging
+
+```text
+correlation_id + step logs
+```
+
+---
+
+### Step 6 — Refactor Selenium gradually
+
+* remove sleeps
+* improve selectors
+* add waits
+
+---
+
+## Example use case
+
+Invoice submission:
 
 Input:
 
@@ -186,48 +288,49 @@ Input:
 
 Execution:
 
-* login to portal
-* check if invoice already exists
-* submit only if missing
-* retry on transient failure
-* store result in state
+* login
+* check existence
+* submit if needed
+* retry failures
+* persist state
 
 Output:
 
-* structured logs per step
+* structured logs
 * artifacts on failure
-* summary report
+* summary
 
 ---
 
 ## Comparison
 
-| Approach                 | Determinism | Testability | Idempotency | Observability   | Flexibility |
-| ------------------------ | ----------- | ----------- | ----------- | --------------- | ----------- |
-| Selenium scripts         | ❌           | ❌           | ❌           | print logs      | ❌           |
-| RPA tools (UiPath, etc.) | ⚠           | limited     | depends     | UI-based        | ❌           |
-| This project             | ✔           | ✔           | ✔           | structured logs | ✔           |
+| Approach         | Determinism | Testability | Idempotency | Observability |
+| ---------------- | ----------- | ----------- | ----------- | ------------- |
+| Selenium scripts | ❌           | ❌           | ❌           | ❌             |
+| RPA tools        | ⚠           | partial     | depends     | limited       |
+| This project     | ✔           | ✔           | ✔           | ✔             |
 
 ---
 
 ## When NOT to use
 
-Do not use this project for:
-
 * one-off scripts
-* simple automation tasks
-* cases where a stable API already exists
-* desktop automation via coordinates
-* CAPTCHA / 2FA flows
-* mobile automation (use Appium)
+* trivial automation
+* stable API already available
+* desktop automation (coordinates)
+* CAPTCHA / 2FA
+* mobile automation
 
 ---
 
-## Optional: AI agent usage
+## Design principles
 
-This project follows the Agent Skills format and can be used with tools like Cursor or Claude Code.
-
-However, it is fully usable without any AI tooling.
+* API-first
+* no `time.sleep`
+* no hardcoded values
+* no global state
+* idempotent operations
+* structured logs per step
 
 ---
 
